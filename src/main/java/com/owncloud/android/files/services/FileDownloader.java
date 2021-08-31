@@ -632,10 +632,6 @@ public class FileDownloader extends Service
         }
 
         if (!downloadResult.isCancelled()) {
-            if (downloadResult.isSuccess()) {
-                // Dont show notification except an error has occured.
-                return;
-            }
             int tickerId = downloadResult.isSuccess() ?
                     R.string.downloader_download_succeeded_ticker : R.string.downloader_download_failed_ticker;
 
@@ -663,19 +659,11 @@ public class FileDownloader extends Service
             mNotificationBuilder.setContentText(ErrorMessageAdapter.getErrorCauseMessage(downloadResult,
                     download, getResources()));
 
-            if (mNotificationManager != null) {
+            if (mNotificationManager != null && !downloadResult.isSuccess()) {
                 mNotificationManager.notify((new SecureRandom()).nextInt(), mNotificationBuilder.build());
-
-                // Remove success notification
-                if (downloadResult.isSuccess()) {
-                    if (conflictUploadId > 0) {
-                        uploadsStorageManager.removeUpload(conflictUploadId);
-                    }
-
-                    // Sleep 2 seconds, so show the notification before remove it
-                    NotificationUtils.cancelWithDelay(mNotificationManager,
-                                                      R.string.downloader_download_succeeded_ticker, 2000);
-                }
+            }
+            if (downloadResult.isSuccess() && conflictUploadId > 0) {
+                uploadsStorageManager.removeUpload(conflictUploadId);
             }
         }
     }
