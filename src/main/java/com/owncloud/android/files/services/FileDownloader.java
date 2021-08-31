@@ -631,56 +631,48 @@ public class FileDownloader extends Service
             mNotificationManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         }
 
-        if (!downloadResult.isCancelled()) {
-            int tickerId = downloadResult.isSuccess() ?
-                    R.string.downloader_download_succeeded_ticker : R.string.downloader_download_failed_ticker;
-
-            boolean needsToUpdateCredentials = ResultCode.UNAUTHORIZED.equals(downloadResult.getCode());
-            tickerId = needsToUpdateCredentials ?
-                    R.string.downloader_download_failed_credentials_error : tickerId;
-
-            mNotificationBuilder
-                    .setTicker(getString(tickerId))
-                    .setContentTitle(getString(tickerId))
-                    .setAutoCancel(true)
-                    .setOngoing(false)
-                    .setProgress(0, 0, false);
-
-            if (needsToUpdateCredentials) {
-                configureUpdateCredentialsNotification(download.getAccount());
-
-            } else {
-                // TODO put something smart in showDetailsIntent
-                Intent showDetailsIntent = new Intent();
-                mNotificationBuilder.setContentIntent(PendingIntent.getActivity(this, (int) System.currentTimeMillis(),
-                        showDetailsIntent, 0));
-            }
-
-            mNotificationBuilder.setContentText(ErrorMessageAdapter.getErrorCauseMessage(downloadResult,
-                    download, getResources()));
-
-            if (mNotificationManager != null && !downloadResult.isSuccess()) {
-                mNotificationManager.notify((new SecureRandom()).nextInt(), mNotificationBuilder.build());
-            }
-            if (downloadResult.isSuccess() && conflictUploadId > 0) {
+        if (downloadResult.isCancelled()) {
+            // No notification
+        } else if (downloadResult.isSuccess()) {
+            // No notification, but remove any resolved conflicts
+            if (conflictUploadId >= 0) {
                 uploadsStorageManager.removeUpload(conflictUploadId);
             }
-        }
-    }
+        } else {
+            // Download failed, a notification is necessary
+            boolean needsToUpdateCredentials = downloadResult.getCode() == ResultCode.UNAUTHORIZED;
+            int tickerId = needsToUpdateCredentials ?
+                R.string.downloader_download_failed_credentials_error : R.string.downloader_download_failed_ticker;
 
-    private void configureUpdateCredentialsNotification(Account account) {
-        // let the user update credentials with one click
-        Intent updateAccountCredentials = new Intent(this, AuthenticatorActivity.class);
-        updateAccountCredentials.putExtra(AuthenticatorActivity.EXTRA_ACCOUNT, account);
-        updateAccountCredentials.putExtra(
-                AuthenticatorActivity.EXTRA_ACTION,
-                AuthenticatorActivity.ACTION_UPDATE_EXPIRED_TOKEN
-        );
-        updateAccountCredentials.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        updateAccountCredentials.addFlags(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
-        updateAccountCredentials.addFlags(Intent.FLAG_FROM_BACKGROUND);
-        mNotificationBuilder.setContentIntent(PendingIntent.getActivity(this, (int) System.currentTimeMillis(),
-                updateAccountCredentials, PendingIntent.FLAG_ONE_SHOT));
+            mNotificationBuilder
+                .setTicker(getString(tickerId))
+                .setContentTitle(getString(tickerId))
+                .setContentText(ErrorMessageAdapter.getErrorCauseMessage(downloadResult, download, getResources()))
+                .setAutoCancel(true)
+                .setOngoing(false)
+                .setProgress(0, 0, false);
+
+            Intent notificationIntent;
+            if (needsToUpdateCredentials) {
+                // Let the user update credentials with one click
+                notificationIntent = new Intent(this, AuthenticatorActivity.class)
+                    .putExtra(AuthenticatorActivity.EXTRA_ACCOUNT, download.getAccount())
+                    .putExtra(AuthenticatorActivity.EXTRA_ACTION, AuthenticatorActivity.ACTION_UPDATE_EXPIRED_TOKEN)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    .addFlags(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
+                    .addFlags(Intent.FLAG_FROM_BACKGROUND);
+            } else {
+                // TODO put something smart in notificationIntent
+                notificationIntent = new Intent();
+            }
+            PendingIntent contentIntent = PendingIntent.getActivity(this, (int) System.currentTimeMillis(),
+                                                                    notificationIntent, PendingIntent.FLAG_ONE_SHOT);
+            mNotificationBuilder.setContentIntent(contentIntent);
+
+            if (mNotificationManager != null) {
+                mNotificationManager.notify((new SecureRandom()).nextInt(), mNotificationBuilder.build());
+            }
+        }
     }
 
 
